@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <th:block th:include="include :: header('流转台账')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="hvacTrace-table" lay-filter="hvacTrace-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="hvacTrace-action">
+    {{# if(d.action == 'CREATE'){ }}<span class="layui-badge layui-bg-blue">建单</span>
+    {{# } else if(d.action == 'ADVANCE'){ }}<span class="layui-badge layui-bg-green">推进</span>
+    {{# } else if(d.action == 'ROLLBACK'){ }}<span class="layui-badge layui-bg-orange">回退</span>
+    {{# } else if(d.action == 'UPDATE'){ }}<span class="layui-badge layui-bg-cyan">改说明</span>
+    {{# } else if(d.action == 'REMOVE'){ }}<span class="layui-badge layui-bg-red">抹单</span>
+    {{# } else if(d.action == 'IMPORT'){ }}<span class="layui-badge layui-bg-gray">补录</span>
+    {{# } else { }}{{d.action}}{{# } }}
+</script>
+
+<script type="text/html" id="hvacTrace-stage">
+    {{# if(d.fromStage == d.toStage){ }}
+      {{# if(d.fromStage == 0){ }}待查验{{# } else if(d.fromStage == 1){ }}清洗中{{# } else if(d.fromStage == 2){ }}待复核{{# } else if(d.fromStage == 3){ }}已归档{{# } else { }}{{d.fromStage}}{{# } }}
+    {{# } else { }}
+      {{# if(d.fromStage == 0){ }}待查验{{# } else if(d.fromStage == 1){ }}清洗中{{# } else if(d.fromStage == 2){ }}待复核{{# } else if(d.fromStage == 3){ }}已归档{{# } else { }}{{d.fromStage}}{{# } }}
+      <i class="layui-icon layui-icon-next" style="font-size:12px;color:#999;"></i>
+      {{# if(d.toStage == 0){ }}待查验{{# } else if(d.toStage == 1){ }}清洗中{{# } else if(d.toStage == 2){ }}待复核{{# } else if(d.toStage == 3){ }}已归档{{# } else { }}{{d.toStage}}{{# } }}
+    {{# } }}
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'jquery'], function () {
+        let table = layui.table;
+        let $ = layui.jquery;
+        let logId = null;
+        let m = location.search.match(/[?&]id=(\d+)/);
+        if (m) {
+            logId = m[1];
+        }
+        let cols = [
+            [
+                {title: '动作', field: 'action', align: 'center', toolbar: '#hvacTrace-action'},
+                {title: '环节（离开→到达）', field: 'stage', align: 'center', toolbar: '#hvacTrace-stage'},
+                {title: '本环节处置说明快照', field: 'content', align: 'left'},
+                {title: '谁动的手', field: 'actionBy', align: 'center'},
+                {title: '什么时候', field: 'actionTime', align: 'center'},
+                {title: '为什么动（回退原因等）', field: 'actionRemark', align: 'left'}
+            ]
+        ];
+        table.render({
+            elem: '#hvacTrace-table',
+            url: rootPath + "/hvacCleanLog/trace?id=" + logId,
+            page: false,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            defaultToolbar: []
+        });
+    })
+</script>
+</html>

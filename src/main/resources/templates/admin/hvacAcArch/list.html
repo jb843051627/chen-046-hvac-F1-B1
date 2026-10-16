@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('集中空调通风系统档案')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">系统记号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="acNo" placeholder="" class="layui-input">
+                </div>
+                <label class="layui-form-label">系统名目</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="acName" placeholder="" class="layui-input">
+                </div>
+                <label class="layui-form-label">系统情形</label>
+                <div class="layui-input-inline">
+                    <select name="status">
+                        <option value="">全部</option>
+                        <option value="0">在用</option>
+                        <option value="1">已停用</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="hvacArch-query">
+                    <i class="layui-icon layui-icon-search"></i>查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i>重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="hvacArch-table" lay-filter="hvacArch-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="hvacArch-toolbar">
+    <button shiro:hasPermission="hvacArch:create" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i>建档
+    </button>
+</script>
+
+<script type="text/html" id="hvacArch-status">
+    {{# if(d.status == 0){ }}<span class="layui-badge layui-bg-blue">在用</span>
+    {{# } else if(d.status == 1){ }}<span class="layui-badge layui-bg-red">已停用</span>
+    {{# } else { }}{{d.status}}{{# } }}
+</script>
+
+<script type="text/html" id="hvacArch-bar">
+    <button shiro:hasPermission="hvacArch:edit" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="edit" title="改档案"><i class="layui-icon layui-icon-edit"></i></button>
+    <button shiro:hasPermission="hvacArch:stop" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="stop" title="标一笔停用（不再往下挂单）"><i class="layui-icon layui-icon-stop"></i></button>
+    <button shiro:hasPermission="hvacArch:remove" class="pear-btn pear-btn-danger pear-btn-sm" lay-event="remove" title="删档案"><i class="layui-icon layui-icon-delete"></i></button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery', 'layer'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let layer = layui.layer;
+        let $ = layui.jquery;
+
+        let MODULE_PATH = rootPath + "/hvacArch/";
+
+        let cols = [
+            [
+                {type: 'checkbox'},
+                {title: '系统记号', field: 'acNo', align: 'left'},
+                {title: '系统名目', field: 'acName', align: 'left'},
+                {title: '安放位置', field: 'placeTxt', align: 'left'},
+                {title: '投用年份', field: 'buildYear', align: 'center'},
+                {title: '系统情形', field: 'status', align: 'center', toolbar: '#hvacArch-status'},
+                {title: '备注', field: 'remark', align: 'left'},
+                {title: '操作', toolbar: '#hvacArch-bar', align: 'center'}
+            ]
+        ];
+
+        table.render({
+            elem: '#hvacArch-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#hvacArch-toolbar',
+            defaultToolbar: [{layEvent: 'refresh', icon: 'layui-icon-refresh'}, 'filter', 'print', 'exports'],
+            where: {orderByColumn: "id", isAsc: "asc"}
+        });
+
+        table.on('tool(hvacArch-table)', function (obj) {
+            if (obj.event === 'edit') {
+                window.edit(obj);
+            } else if (obj.event === 'stop') {
+                window.stop(obj);
+            } else if (obj.event === 'remove') {
+                window.remove(obj);
+            }
+        });
+
+        table.on('toolbar(hvacArch-table)', function (obj) {
+            if (obj.event === 'add') {
+                window.add();
+            } else if (obj.event === 'refresh') {
+                window.refresh();
+            }
+        });
+
+        form.on('submit(hvacArch-query)', function (data) {
+            table.reload('hvacArch-table', {where: data.field});
+            return false;
+        });
+
+        let formHtml = function (d) {
+            d = d || {};
+            return '<form class="layui-form" lay-filter="hvacArch-form" style="padding:20px;">' +
+                '<input type="hidden" name="id" value="' + (d.id || '') + '">' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">系统记号</label>' +
+                '<div class="layui-input-block"><input type="text" name="acNo" value="' + (d.acNo || '') + '" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">系统名目</label>' +
+                '<div class="layui-input-block"><input type="text" name="acName" value="' + (d.acName || '') + '" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">安放位置</label>' +
+                '<div class="layui-input-block"><input type="text" name="placeTxt" value="' + (d.placeTxt || '') + '" placeholder="楼宇—楼层—机房" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">投用年份</label>' +
+                '<div class="layui-input-block"><input type="text" name="buildYear" value="' + (d.buildYear || '') + '" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">备注</label>' +
+                '<div class="layui-input-block"><textarea name="remark" class="layui-textarea">' + (d.remark || '') + '</textarea></div>' +
+                '</div>' +
+                '</form>';
+        };
+
+        window.add = function () {
+            layer.open({
+                type: 1,
+                title: '建档',
+                shade: 0.1,
+                area: ['500px', '430px'],
+                content: formHtml(),
+                btn: ['保存', '取消'],
+                success: function () {
+                    form.render();
+                },
+                yes: function (index) {
+                    let f = form.val('hvacArch-form');
+                    if (!f.acNo || !f.acName) {
+                        layer.msg('系统记号与名目必填', {icon: 2});
+                        return;
+                    }
+                    let loading = layer.load();
+                    $.ajax({
+                        url: MODULE_PATH + 'create',
+                        data: f,
+                        dataType: 'json',
+                        type: 'post',
+                        success: function (result) {
+                            layer.close(loading);
+                            layer.close(index);
+                            if (result.code == 200) {
+                                layer.msg(result.msg, {icon: 1, time: 1200}, function () {
+                                    table.reload('hvacArch-table');
+                                });
+                            } else {
+                                layer.msg(result.msg, {icon: 2, time: 1500});
+                            }
+                        }
+                    });
+                }
+            });
+        };
+
+        window.edit = function (obj) {
+            layer.open({
+                type: 1,
+                title: '改档案',
+                shade: 0.1,
+                area: ['500px', '430px'],
+                content: formHtml(obj.data),
+                success: function () {
+                    form.render();
+                },
+                yes: function (index) {
+                    let f = form.val('hvacArch-form');
+                    let loading = layer.load();
+                    $.ajax({
+                        url: MODULE_PATH + 'edit',
+                        data: f,
+                        dataType: 'json',
+                        type: 'post',
+                        success: function (result) {
+                            layer.close(loading);
+                            layer.close(index);
+                            if (result.code == 200) {
+                                layer.msg(result.msg, {icon: 1, time: 1200}, function () {
+                                    table.reload('hvacArch-table');
+                                });
+                            } else {
+                                layer.msg(result.msg, {icon: 2, time: 1500});
+                            }
+                        }
+                    });
+                }
+            });
+        };
+
+        window.stop = function (obj) {
+            layer.confirm('确定把该集中空调系统标为停用？停用后不得再往下挂单。', {icon: 3, title: '提示'}, function (index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'stop?id=' + obj.data.id,
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1200}, function () {
+                                table.reload('hvacArch-table');
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        window.remove = function (obj) {
+            layer.confirm('确定删除该档案？', {icon: 3, title: '提示'}, function (index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'remove?id=' + obj.data.id,
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1200}, function () {
+                                obj.del();
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        window.refresh = function () {
+            table.reload('hvacArch-table');
+        };
+    })
+</script>
+</html>

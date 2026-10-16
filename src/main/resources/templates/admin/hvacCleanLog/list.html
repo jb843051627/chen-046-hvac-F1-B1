@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('集中空调清洗消毒作业单流转台账')"/>
+</head>
+<body class="pear-container">
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">件次</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="bizNo" placeholder="" class="layui-input">
+                </div>
+                <label class="layui-form-label">空调系统记号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="acNo" placeholder="" class="layui-input">
+                </div>
+                <label class="layui-form-label">当前环节</label>
+                <div class="layui-input-inline">
+                    <select name="stage">
+                        <option value="">全部</option>
+                        <option value="0">待查验</option>
+                        <option value="1">清洗中</option>
+                        <option value="2">待复核</option>
+                        <option value="3">已归档</option>
+                    </select>
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="hvacCleanLog-query">
+                    <i class="layui-icon layui-icon-search"></i>查询
+                </button>
+                <button type="reset" class="pear-btn pear-btn-md">
+                    <i class="layui-icon layui-icon-refresh"></i>重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="layui-card">
+    <div class="layui-card-body">
+        <table id="hvacCleanLog-table" lay-filter="hvacCleanLog-table"></table>
+    </div>
+</div>
+</body>
+
+<script type="text/html" id="hvacCleanLog-toolbar">
+    <button shiro:hasPermission="hvacCleanLog:create" class="pear-btn pear-btn-primary pear-btn-md" lay-event="add">
+        <i class="layui-icon layui-icon-add-1"></i>新建作业单
+    </button>
+    <button shiro:hasPermission="hvacCleanLog:import" class="pear-btn pear-btn-warming pear-btn-md" lay-event="import">
+        <i class="layui-icon layui-icon-upload-drag"></i>补录老单
+    </button>
+    <button shiro:hasPermission="hvacCleanLog:reconcile" class="pear-btn pear-btn-normal pear-btn-md" lay-event="reconcile">
+        <i class="layui-icon layui-icon-chart-screen"></i>册上对账
+    </button>
+</script>
+
+<script type="text/html" id="hvacCleanLog-stage">
+    {{# if(d.stage == 0){ }}<span class="layui-badge layui-bg-blue">待查验</span>
+    {{# } else if(d.stage == 1){ }}<span class="layui-badge layui-bg-orange">清洗中</span>
+    {{# } else if(d.stage == 2){ }}<span class="layui-badge layui-bg-green">待复核</span>
+    {{# } else if(d.stage == 3){ }}<span class="layui-badge layui-bg-black">已归档</span>
+    {{# } else { }}<span class="layui-badge">{{d.stage}}</span>{{# } }}
+</script>
+
+<script type="text/html" id="hvacCleanLog-status">
+    {{# if(d.status == 0){ }}待发起
+    {{# } else if(d.status == 1){ }}在办
+    {{# } else if(d.status == 2){ }}已办结
+    {{# } else { }}{{d.status}}{{# } }}
+</script>
+
+<script type="text/html" id="hvacCleanLog-bar">
+    <button shiro:hasPermission="hvacCleanLog:advance" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="advance" title="推进一档"><i class="layui-icon layui-icon-next"></i></button>
+    <button shiro:hasPermission="hvacCleanLog:rollback" class="pear-btn pear-btn-warming pear-btn-sm" lay-event="rollback" title="回退一档（撤销刚推那一下）"><i class="layui-icon layui-icon-prev"></i></button>
+    <button shiro:hasPermission="hvacCleanLog:updateContent" class="pear-btn pear-btn-primary pear-btn-sm" lay-event="updateContent" title="改本环节处置说明"><i class="layui-icon layui-icon-edit"></i></button>
+    <button shiro:hasPermission="hvacCleanLog:trace" class="pear-btn pear-btn-sm" lay-event="trace" title="流转台账（事后倒着核）"><i class="layui-icon layui-icon-list"></i></button>
+    <button shiro:hasPermission="hvacCleanLog:remove" class="pear-btn pear-btn-danger pear-btn-sm" lay-event="remove" title="抹单"><i class="layui-icon layui-icon-delete"></i></button>
+</script>
+
+<th:block th:include="include :: footer"/>
+<script>
+    layui.use(['table', 'form', 'jquery', 'layer', 'laydate'], function () {
+        let table = layui.table;
+        let form = layui.form;
+        let layer = layui.layer;
+        let laydate = layui.laydate;
+        let $ = layui.jquery;
+
+        let MODULE_PATH = rootPath + "/hvacCleanLog/";
+
+        let cols = [
+            [
+                {type: 'checkbox'},
+                {title: '件次', field: 'bizNo', align: 'left'},
+                {title: '空调系统记号', field: 'acNo', align: 'left'},
+                {title: '系统名目', field: 'acName', align: 'left'},
+                {title: '作业单位/人', field: 'cleanBy', align: 'left'},
+                {title: '作业日期', field: 'cleanDate', align: 'center'},
+                {title: '送检冷却水(份)', field: 'sampleCount', align: 'center'},
+                {title: '当前环节', field: 'stage', align: 'center', toolbar: '#hvacCleanLog-stage'},
+                {title: '单子状态', field: 'status', align: 'center', toolbar: '#hvacCleanLog-status'},
+                {title: '本环节处置说明', field: 'content', align: 'left'},
+                {title: '操作', toolbar: '#hvacCleanLog-bar', align: 'center'}
+            ]
+        ];
+
+        table.render({
+            elem: '#hvacCleanLog-table',
+            url: MODULE_PATH + 'list',
+            page: true,
+            method: 'get',
+            cols: cols,
+            skin: 'line',
+            toolbar: '#hvacCleanLog-toolbar',
+            defaultToolbar: [{layEvent: 'refresh', icon: 'layui-icon-refresh'}, 'filter', 'print', 'exports'],
+            where: {orderByColumn: "id", isAsc: "desc"}
+        });
+
+        table.on('tool(hvacCleanLog-table)', function (obj) {
+            let data = obj.data;
+            if (obj.event === 'advance') {
+                window.advance(obj);
+            } else if (obj.event === 'rollback') {
+                window.rollback(obj);
+            } else if (obj.event === 'updateContent') {
+                window.updateContent(obj);
+            } else if (obj.event === 'trace') {
+                window.trace(obj);
+            } else if (obj.event === 'remove') {
+                window.remove(obj);
+            }
+        });
+
+        table.on('toolbar(hvacCleanLog-table)', function (obj) {
+            if (obj.event === 'add') {
+                window.add();
+            } else if (obj.event === 'import') {
+                window.importLegacy();
+            } else if (obj.event === 'reconcile') {
+                window.reconcile();
+            } else if (obj.event === 'refresh') {
+                window.refresh();
+            }
+        });
+
+        form.on('submit(hvacCleanLog-query)', function (data) {
+            table.reload('hvacCleanLog-table', {where: data.field});
+            return false;
+        });
+
+        // 新建作业单：件次系统排，没有敲键的地方
+        window.add = function () {
+            let html = '<form class="layui-form" lay-filter="hvacCleanLog-create-form" style="padding:20px;">' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">集中空调系统</label>' +
+                '<div class="layui-input-block"><select name="acId" id="hvacCleanLog-acId"></select></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">作业单位/人</label>' +
+                '<div class="layui-input-block"><input type="text" name="cleanBy" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">作业日期</label>' +
+                '<div class="layui-input-block"><input type="text" name="cleanDate" id="hvacCleanLog-cleanDate" class="layui-input"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">送检冷却水份数</label>' +
+                '<div class="layui-input-block"><input type="text" name="sampleCount" class="layui-input" placeholder="这一趟抽了几份冷却水送检"></div>' +
+                '</div>' +
+                '<div class="layui-form-item">' +
+                '<label class="layui-form-label">处置说明</label>' +
+                '<div class="layui-input-block"><textarea name="content" class="layui-textarea"></textarea></div>' +
+                '</div>' +
+                '</form>';
+            layer.open({
+                type: 1,
+                title: '新建作业单（件次由系统排）',
+                shade: 0.1,
+                area: ['520px', '480px'],
+                content: html,
+                btn: ['保存', '取消'],
+                success: function (layero) {
+                    $.ajax({
+                        url: rootPath + "/hvacArch/listActive",
+                        dataType: 'json',
+                        type: 'get',
+                        success: function (result) {
+                            let opts = '<option value="">请选择在用系统</option>';
+                            $.each(result.data, function (i, a) {
+                                opts += '<option value="' + a.id + '">' + a.acNo + ' ' + a.acName + '</option>';
+                            });
+                            $('#hvacCleanLog-acId').html(opts);
+                            form.render('select');
+                        }
+                    });
+                    laydate.render({elem: '#hvacCleanLog-cleanDate', type: 'datetime', format: 'yyyy-MM-dd HH:mm:ss'});
+                    form.render();
+                },
+                yes: function (index) {
+                    let f = form.val('hvacCleanLog-create-form');
+                    if (!f.acId) {
+                        layer.msg('请先选择集中空调系统', {icon: 2});
+                        return;
+                    }
+                    let loading = layer.load();
+                    $.ajax({
+                        url: MODULE_PATH + 'create',
+                        data: f,
+                        dataType: 'json',
+                        type: 'post',
+                        success: function (result) {
+                            layer.close(loading);
+                            layer.close(index);
+                            if (result.code == 200) {
+                                layer.msg(result.msg, {icon: 1, time: 1200}, function () {
+                                    table.reload('hvacCleanLog-table');
+                                });
+                            } else {
+                                layer.msg(result.msg, {icon: 2, time: 1500});
+                            }
+                        }
+                    });
+                }
+            });
+        };
+
+        // 推进一档：同一节连点两下、并发只算先到那一下
+        window.advance = function (obj) {
+            layer.prompt({
+                title: '推进一档（可留推进说明，可不填；本环节处置说明另用"改说明"记）',
+                formType: 2,
+                area: ['420px', '200px']
+            }, function (value, index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'advance',
+                    data: {id: obj.data.id, remark: value},
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1000}, function () {
+                                obj.del();
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        // 回退一档：撤销刚推那一下，不是打回起点；为什么退必须写得下
+        window.rollback = function (obj) {
+            layer.prompt({
+                title: '回退一档（撤销刚才那一下，请填回退原因）',
+                formType: 2,
+                area: ['420px', '200px']
+            }, function (value, index) {
+                layer.close(index);
+                if (!value || value.trim().length === 0) {
+                    layer.msg('回退原因必填', {icon: 2});
+                    return;
+                }
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'rollback',
+                    data: {id: obj.data.id, remark: value},
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1000}, function () {
+                                obj.del();
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        // 改本环节处置说明：已归档不得改
+        window.updateContent = function (obj) {
+            layer.prompt({
+                title: '改本环节处置说明',
+                value: obj.data.content || '',
+                formType: 2,
+                area: ['420px', '200px']
+            }, function (value, index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'updateContent',
+                    data: {id: obj.data.id, content: value},
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1000}, function () {
+                                table.reload('hvacCleanLog-table');
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        // 流转台账：事后倒着核——走过哪几节、停了几回、谁动的手、每节处置说明
+        window.trace = function (obj) {
+            layer.open({
+                type: 2,
+                title: '流转台账 - ' + obj.data.bizNo,
+                shade: 0.1,
+                area: ['860px', '520px'],
+                content: MODULE_PATH + 'traceView?id=' + obj.data.id
+            });
+        };
+
+        // 抹单：已归档不可抹
+        window.remove = function (obj) {
+            layer.confirm('确定要抹掉这张单？已归档的单子不可抹。', {icon: 3, title: '提示'}, function (index) {
+                layer.close(index);
+                let loading = layer.load();
+                $.ajax({
+                    url: MODULE_PATH + 'remove?id=' + obj.data.id,
+                    dataType: 'json',
+                    type: 'post',
+                    success: function (result) {
+                        layer.close(loading);
+                        if (result.code == 200) {
+                            layer.msg(result.msg, {icon: 1, time: 1000}, function () {
+                                obj.del();
+                            });
+                        } else {
+                            layer.msg(result.msg, {icon: 2, time: 1500});
+                        }
+                    }
+                });
+            });
+        };
+
+        // 补录纸本存量老单
+        window.importLegacy = function () {
+            let sample = JSON.stringify([
+                {bizNo: '2019-008', acNo: 'AC0001', cleanBy: '某某清洗公司-张三',
+                    cleanDate: '2019-05-10 00:00:00', stage: 2, status: 1, content: '送检冷却水2份', remark: '纸本补录'},
+                {bizNo: '2019-009', acNo: 'AC0001', cleanBy: '某某清洗公司-李四',
+                    cleanDate: '2019-11-02 00:00:00', stage: 2, status: 2, content: '纸本写着已归档但实际停在待复核', remark: '纸本补录'}
+            ], null, 2);
+            let html = '<div style="padding:16px;">' +
+                '<p style="margin-bottom:8px;">粘贴纸本存量老单的 JSON 数组（件次必须有；件次为空或撞号的一律拒收；状态以环节为准修正）。</p>' +
+                '<textarea id="hvacCleanLog-import-json" class="layui-textarea" rows="14" style="font-family:monospace;"></textarea>' +
+                '<p style="margin-top:8px;color:#888;">格式示例：</p>' +
+                '<pre style="font-size:12px;background:#f7f7f7;padding:8px;border-radius:4px;">' + sample + '</pre>' +
+                '</div>';
+            layer.open({
+                type: 1,
+                title: '补录纸本存量老单',
+                shade: 0.1,
+                area: ['560px', '560px'],
+                content: html,
+                btn: ['补录', '取消'],
+                yes: function (index) {
+                    let txt = $('#hvacCleanLog-import-json').val();
+                    let list;
+                    try {
+                        list = JSON.parse(txt);
+                    } catch (e) {
+                        layer.msg('JSON 解析失败，请检查格式', {icon: 2});
+                        return;
+                    }
+                    let loading = layer.load();
+                    $.ajax({
+                        url: MODULE_PATH + 'import',
+                        data: JSON.stringify(list),
+                        dataType: 'json',
+                        contentType: 'application/json',
+                        type: 'post',
+                        success: function (result) {
+                            layer.close(loading);
+                            layer.close(index);
+                            if (result.code == 200) {
+                                layer.msg(result.msg, {icon: 1, time: 1500}, function () {
+                                    table.reload('hvacCleanLog-table');
+                                });
+                            } else {
+                                layer.msg(result.msg, {icon: 2, time: 2000});
+                            }
+                        }
+                    });
+                }
+            });
+        };
+
+        // 册上对账：按系统挑与按环节挑，两边数要对得上
+        window.reconcile = function () {
+            let loading = layer.load();
+            $.ajax({
+                url: MODULE_PATH + 'reconcile',
+                dataType: 'json',
+                type: 'get',
+                success: function (result) {
+                    layer.close(loading);
+                    let r = result.data || {};
+                    let txt = '<div style="padding:16px;">' +
+                        '<p style="font-size:15px;font-weight:bold;margin-bottom:12px;">' + result.msg + '</p>' +
+                        '<table class="layui-table">' +
+                        '<tr><td>册上单子总数（未抹单）</td><td>' + r.totalOrders + '</td></tr>' +
+                        '<tr><td>按环节挑：已归档（stage=3）</td><td>' + r.countByStageArchived + '</td></tr>' +
+                        '<tr><td>按系统挑：已办结（status=2）</td><td>' + r.countByStatusFinished + '</td></tr>' +
+                        '<tr><td>两边差（应为 0）</td><td style="color:' + (r.diff == 0 ? 'green' : 'red') + '">' + r.diff + '</td></tr>' +
+                        '<tr><td>存量状态与环节不符</td><td>' + r.statusMismatchCount + '</td></tr>' +
+                        '</table></div>';
+                    layer.open({
+                        type: 1,
+                        title: '册上对账',
+                        shade: 0.1,
+                        area: ['520px', '420px'],
+                        content: txt
+                    });
+                }
+            });
+        };
+
+        window.refresh = function () {
+            table.reload('hvacCleanLog-table');
+        };
+    })
+</script>
+</html>
