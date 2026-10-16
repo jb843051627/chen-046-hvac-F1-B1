@@ -112,67 +112,94 @@ public class THvacCleanLogServiceImpl implements ITHvacCleanLogService {
     @Transactional(rollbackFor = Exception.class)
     public THvacCleanLog advance(Long id, String remark) {
         THvacCleanLog r = this.hvacCleanLogMapper.selectById(id);
-        if (r == null) {
+        if (r == null || isRemoved(r)) {
             return null;
         }
-        int st = r.getStage() == null ? 0 : r.getStage().intValue();
-        // 按流程图逐个环节判断当前进度，再决定下一档
-        if (st == 0) {
-            r.setStage(2);
-            r.setStatus(1);
-        } else if (st == 1) {
-            r.setStage(3);
-            r.setStatus(1);
-        } else if (st == 2) {
-            r.setStage(3);
-            r.setStatus(1);
-        } else {
-            r.setStage(3);
-            r.setStatus(1);
+        int from = stageOf(r);
+        if (!CleanLogFlow.canAdvance(from)) {
+            // 已归档定死：不得再推进
+            return null;
         }
-        r.setLastAction(remark);
-        this.hvacCleanLogMapper.updateById(r);
-        return r;
+        int to = CleanLogFlow.nextStage(from);
+        int toStatus = CleanLogFlow.deriveStatus(to);
+        String op = operator();
+        // 条件更新（WHERE 当前环节=预期环节）：同一节连点两下、并发两笔只算先到的那一下
+        int rows = this.hvacCleanLogMapper.advanceStage(id, from, toStatus, op, new Date());
+        if (rows == 0) {
+            return null;
+        }
+        this.insertTrace(id, r.getBizNo(), CleanLogFlow.ACTION_ADVANCE, from, to,
+                r.getContent(), op, remark);
+        return this.hvacCleanLogMapper.selectById(id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public THvacCleanLog rollback(Long id, String remark) {
         THvacCleanLog r = this.hvacCleanLogMapper.selectById(id);
-        if (r == null) {
+        if (r == null || isRemoved(r)) {
             return null;
         }
-        int st = r.getStage() == null ? 0 : r.getStage().intValue();
-        if (st >= 3) {
-            r.setStage(1);
-        } else {
-            r.setStage(0);
+        int from = stageOf(r);
+        if (!CleanLogFlow.canRollback(from)) {
+            // 待查验无可退、已归档定死
+            return null;
         }
-        r.setStatus(1);
-        r.setLastAction(remark);
-        this.hvacCleanLogMapper.updateById(r);
-        return r;
+        int to = CleanLogFlow.prevStage(from);
+        int toStatus = CleanLogFlow.deriveStatus(to);
+        String op = operator();
+        // 条件更新：撤销刚推的那一下（环节-1），并发/连点只算先到的那一下
+        int rows = this.hvacCleanLogMapper.rollbackStage(id, from, toStatus, op, new Date());
+        if (rows == 0) {
+            return null;
+        }
+        this.insertTrace(id, r.getBizNo(), CleanLogFlow.ACTION_ROLLBACK, from, to,
+                r.getContent(), op, remark);
+        return this.hvacCleanLogMapper.selectById(id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean updateContent(Long id, String content) {
         THvacCleanLog r = this.hvacCleanLogMapper.selectById(id);
-        if (r == null) {
+        if (r == null || isRemoved(r)) {
             return false;
         }
-        r.setContent(content);
-        return this.hvacCleanLogMapper.updateById(r) > 0;
+        int st = stageOf(r);
+        if (!CleanLogFlow.canEdit(st)) {
+            // 已归档不得改处置说明
+            return false;
+        }
+        long expectVersion = r.getVersion() == null ? 0L : r.getVersion();
+        String op = operator();
+        int rows = this.hvacCleanLogMapper.updateContentConditional(id, expectVersion, content, op, new Date());
+        if (rows == 0) {
+            // 乐观锁挡并发：内容已被别人改过，这次不生效
+            return false;
+        }
+        this.insertTrace(id, r.getBizNo(), CleanLogFlow.ACTION_UPDATE, st, st, content, op, content);
+        return true;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean remove(Long id) {
         THvacCleanLog r = this.hvacCleanLogMapper.selectById(id);
-        if (r == null) {
+        if (r == null || isRemoved(r)) {
             return false;
         }
-        return this.hvacCleanLogMapper.deleteById(id) > 0;
+        int st = stageOf(r);
+        if (!CleanLogFlow.canRemove(st)) {
+            // 已归档定死：不得抹单
+            return false;
+        }
+        String op = operator();
+        int rows = this.hvacCleanLogMapper.removeSoft(id, op, new Date());
+        if (rows == 0) {
+            return false;
+        }
+        this.insertTrace(id, r.getBizNo(), CleanLogFlow.ACTION_REMOVE, st, st, r.getContent(), op, "抹单");
+        return true;
     }
 
     @Override
